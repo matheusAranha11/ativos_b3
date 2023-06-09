@@ -2,9 +2,15 @@ import pandas as pd
 from augme_utils.connections.connections import create_database_connection
 
 
+def etl_b3_txt(txt_filepath):
+    """
+    Rotina que le o arquivo de isins da b3 e sobe os dados para o banco
 
-def load_b3_txt(txt_filepath):
+    Args:
+        txt_filepath(str): caminho do arquivo contendo as informacoes
+    """
 
+    # LEITURA DO ARQUIVO
     b3_df = pd.read_csv(txt_filepath)
     columns = [
         'data_geracao', 'acao_sofrida', 'isin',
@@ -24,37 +30,32 @@ def load_b3_txt(txt_filepath):
         'situacao_isin', 'data_primeirop_pagamento_juros'
         ]
     b3_df.columns = columns
-
-    """
-    CONVERTER COLUNAS PARA DATE
-        data_expiracao
-        data_geracao
-        data_emissao
-        data_expiracao
-        data_acao
-        data_base
-        data_primeirop_pagamento_juros
-        
-    """
-
     
-    ##########################
+    # TRATAMENTO PARA DATAS
+    date_columns = ['data_expiracao', 'data_geracao', 'data_emissao', 'data_expiracao', 'data_acao', 'data_base', 'data_primeirop_pagamento_juros']
 
+    for column in date_columns:
+    
+        b3_df[column] = pd.to_datetime(b3_df[column], format='%Y%m%d', errors='coerce').dt.date
+        
+    
+    b3_df['ano_emissao'] = b3_df['ano_emissao'].fillna(-1)
+    b3_df['ano_emissao'] = b3_df['ano_emissao'].astype(int)
+    b3_df['ano_emissao'] = b3_df['ano_emissao'].replace(-1, pd.NA)
+
+    b3_df['ano_expiracao'] = b3_df['ano_expiracao'].fillna(-1)
+    b3_df['ano_expiracao'] = b3_df['ano_expiracao'].astype(int)
+    b3_df['ano_expiracao'] = b3_df['ano_expiracao'].replace(-1, pd.NA)
+
+    # SUBINDO DADOS PARA O BANCO
     b3_table = 'ativos_b3'
     vanadio_connection = create_database_connection("VANADIO")
 
-    print(f"Subindo {len(b3_df)} na tabela {b3_table} do banco VANADIO...\n")
+    print(f"Subindo {len(b3_df)} na tabela {b3_table} do banco VANADIO.../n")
     b3_df.to_sql(name=b3_table, schema='bronze', con=vanadio_connection, index=False, if_exists='append')
-    print("Concluído.\n")
+    print("Concluído./n")
 
     vanadio_connection.close()
-    return
+    
+    return None
 
-
-    # definir tabela pra subir
-    # subir pra tabela
-
-filepath = 'C:/Users/matheus.lopes/Documents/github/ativos_b3/docs/total/NUMERACA.TXT'
-b3 = load_b3_txt(filepath)
-
-print("a")
