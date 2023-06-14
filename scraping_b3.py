@@ -1,8 +1,9 @@
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.operators.bash import BashOperator
+# from airflow import DAG
+# from airflow.operators.python import PythonOperator
+# from airflow.operators.bash import BashOperator
 from augme_utils.credentials.credentials import default_directory
-import pendulum
+
+# import pendulum
 
 download_dir = default_directory + 'isins_b3'
 
@@ -122,28 +123,114 @@ def etl_b3_txt():
     
     return None
 
+def cadastrar_futuros():
+    from augme_utils.connections.connections import create_database_connection
+    import pandas as pd
+    import requests
 
-br_timezone = pendulum.timezone("Brazil/East")
+    query_futuros = """
+    WITH codigos_futuros AS (
+	SELECT *
+	FROM VANADIO.bronze.FUTUROS_BUSCADOS
 
-with DAG(
+),
 
-    'atualizar_isins_b3_dag',
+futuros_cadastrados AS (
 
-    start_date = pendulum.datetime(2023, 4, 11, tz=br_timezone),
+	SELECT isin,
+	       trading_code
+	FROM PREGO.prego.ativos_futuros f
+	JOIN PREGO.prego.ativos_derivativo d ON f.derivativo_ptr_id = d.ativo_ptr_id
+	JOIN PREGO.prego.ativos_ativo a ON d.ativo_ptr_id = a.id
+),
 
-    schedule_interval = '0 7 2 * *',
+futuros_no_arquivo AS (
 
-    tags = ["Cadastro"],
+	SELECT isin,
+		   CONCAT(tipo_ativo, '', numero_serie_opcao) trading_code,
+		   CONCAT('20', RIGHT(numero_serie_opcao, 2), '-', 
+              CASE 
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'F' THEN '01-31'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'G' THEN '02-28'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'H' THEN '03-31'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'J' THEN '04-30'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'K' THEN '05-31'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'M' THEN '06-30'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'N' THEN '07-31'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'Q' THEN '08-31'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'U' THEN '09-30'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'V' THEN '10-31'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'X' THEN '11-30'
+                WHEN SUBSTRING(numero_serie_opcao, 1, 1) = 'Z' THEN '12-31'
+              END) AS vencimento
+	FROM VANADIO.bronze.ativos_b3
+	WHERE descricao LIKE 'CONTRATO%FUTURO%'
+	AND numero_serie_opcao IS NOT NULL
+	AND tipo_ativo IN (SELECT *
+					   FROM codigos_futuros)
 
-    catchup = False
+),
 
-) as dag:
 
-    update_utils = BashOperator(task_id='update_utils', bash_command='pip install git+https://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@github.com/vanadio-augme/augme_utils.git --force-reinstall')
-    download_isins = PythonOperator(task_id='download_atualizacoes', python_callable = download_atualizacoes_isins_b3)
-    unzip_arq = PythonOperator(task_id='unzip_arq', python_callable = unzip_isins_b3)
-    etl_isins = PythonOperator(task_id='elt_isins', python_callable = etl_b3_txt)
+novos_futuros AS (
 
-    #update_utils >> download_isins >> unzip_arq >> etl_isins
+	SELECT futuros_no_arquivo.isin,
+		   futuros_no_arquivo.trading_code,
+		   nome_ativo = futuros_no_arquivo.trading_code,
+		   risco = 'TBD',
+		   senioridade = 'TBD',
+		   tipo_garantia = 'TBD',
+		   liquidez_esperada = 'TBD',
+		   futuros_no_arquivo.vencimento,
+		   moeda = 'BRL'
+	FROM futuros_no_arquivo
+	WHERE isin NOT IN (SELECT isin
+	                   FROM futuros_cadastrados)
+	AND trading_code NOT IN (SELECT trading_code
+	                         FROM futuros_cadastrados)
 
-    download_isins
+)
+
+SELECT *
+FROM novos_futuros
+"""
+
+    con = create_database_connection("VANADIO")
+    novos_futuros = pd.read_sql_query(query_futuros, con)
+
+    if len(novos_futuros) > 0:
+        url_futuros = 'http://127.0.0.1:8000/ativos/rest/futuros/'
+        dict_futuros = novos_futuros.to_dict(orient='list')
+        response = requests.post(url=url_futuros, json=dict_futuros)
+
+        if response.status_code == 200:
+            print('Requisição bem-sucedida')
+        else:
+            print('Falha na requisição')
+
+cadastrar_futuros()
+
+# br_timezone = pendulum.timezone("Brazil/East")
+
+# with DAG(
+
+#     'atualizar_isins_b3_dag',
+
+#     start_date = pendulum.datetime(2023, 4, 11, tz=br_timezone),
+
+#     schedule_interval = '0 7 2 * *',
+
+#     tags = ["Cadastro"],
+
+#     catchup = False
+
+# ) as dag:
+
+#     update_utils = BashOperator(task_id='update_utils', bash_command='pip install git+https://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@github.com/vanadio-augme/augme_utils.git --force-reinstall')
+#     download_isins = PythonOperator(task_id='download_atualizacoes', python_callable = download_atualizacoes_isins_b3)
+#     unzip_arq = PythonOperator(task_id='unzip_arq', python_callable = unzip_isins_b3)
+#     etl_isins = PythonOperator(task_id='elt_isins', python_callable = etl_b3_txt)
+
+#     #update_utils >> download_isins >> unzip_arq >> etl_isins
+
+#     download_isins
