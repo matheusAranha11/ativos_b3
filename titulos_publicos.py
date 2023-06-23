@@ -1,10 +1,10 @@
-#%%
+
 from augme_utils.anbima.anbima_feed import AnbimaTPF, AnbimaConnect, CLIENT_ID, CLIENT_SECRET
 from augme_utils.connections.connections import create_database_connection
 import pandas as pd
 import datetime
 import requests
-#%%
+
 
 def get_titulos_anbima(target_date):
 
@@ -19,7 +19,7 @@ def get_titulos_anbima(target_date):
     titulos_df = pd.json_normalize(titulos)
 
     return titulos_df
-#%%
+
 def get_titulos_cadastrados():
 
     cnxn = create_database_connection("PREGO")
@@ -34,7 +34,7 @@ def get_titulos_cadastrados():
     cnxn.close()
     return titulos_cadastrados
 
-#%%
+
 
 def tratamento_novos_titulos(novos_titulos):
 
@@ -98,7 +98,7 @@ def tratamento_novos_titulos(novos_titulos):
 
     return novos_titulos
 
-#%%
+
 
 def etl_novos_titulos(target_date):
     titulos_anbima = get_titulos_anbima(target_date)
@@ -130,5 +130,3 @@ def etl_novos_titulos(target_date):
 
     return    
 
-
-# %%
