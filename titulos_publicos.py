@@ -65,7 +65,7 @@ def tratamento_novos_titulos(novos_titulos):
 
     # Mapeamento de indexadores e taxas de emissão
     map_indexador = {'LFT': 'CDI%', 'NTN-B': 'IPCA+', 'LTN':'PRE'}
-    map_taxa_emissao = {'LFT': 1, 'NTN-B': 0.06}
+    map_taxa_emissao = {'LFT': 1, 'NTN-B': -1, 'LTN':-1}
 
     # Adicionar as colunas "indexador" e "taxa_emissao" ao DataFrame original
     novos_titulos['indexador'] = novos_titulos['tipo_titulo'].map(map_indexador)
@@ -109,28 +109,26 @@ def etl_novos_titulos(target_date):
 
     novos_titulos_tratados = tratamento_novos_titulos(novos_titulos)
     
-
     # POST REQUESTS
     
-    return novos_titulos_tratados
+    if len(novos_titulos) > 0:
 
-    # if len(novos_titulos) > 0:
+        titulos_url = 'https://vanadio.azurewebsites.net/ativos/rest/titpublico/'
+        novos_titulos_dict = novos_titulos_tratados.to_dict(orient='records')
 
-    #     titulos_url = 'https://vanadio.azurewebsites.net/ativos/rest/titpublico/'
-    #     novos_titulos_dict = novos_titulos.to_dict(orient='records')
+        for titulo in novos_titulos_dict:
+            response = requests.post(url=titulos_url, json=titulo)
 
-    #     for titulo in novos_titulos_dict:
-    #         response = requests.post(url=titulos_url, json=titulo)
+            if response.status_code == 201:
+                print(f'Ativo {titulo["nome_ativo"]} cadastrado com sucesso.')
+            else:
+                print('Falha na requisição')
 
-    #         if response.status_code == 201:
-    #             print(f'Ativo {titulo["nome_ativo"]} cadastrado com sucesso.')
-    #         else:
-    #             print('Falha na requisição')
+    else:
+        print("Nao há nenhum novo titulo publico a ser cadastrado.")
 
-    # else:
-    #     print("Nao há nenhum novo titulo publico a ser cadastrado.")
 
-    
+    return    
 
 
 # %%
