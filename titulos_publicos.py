@@ -12,12 +12,11 @@ def get_titulos_anbima(target_date):
         target_date = datetime.datetime.strptime(target_date,'%Y-%m-%d').date()
 
     con = AnbimaConnect(CLIENT_ID, CLIENT_SECRET)
-    tpf = AnbimaTPF(con)
+    tpf = AnbimaTPF(con, ambiente='PRODUCTION')
     response = tpf.mercado_secundario(target_date)    
 
     titulos = response.json()
     titulos_df = pd.json_normalize(titulos)
-    titulos_df['isin'] = 'ISINFAKEEEEE'
 
     return titulos_df
 #%%
@@ -34,15 +33,12 @@ def get_titulos_cadastrados():
     titulos_cadastrados = pd.read_sql_query(query_titulos, cnxn)
     cnxn.close()
     return titulos_cadastrados
+
 #%%
 
-def etl_novos_titulos(target_date):
-    titulos_anbima = get_titulos_anbima(target_date)
-    titulos_cadastrados = get_titulos_cadastrados()
+def tratamento_novos_titulos(novos_titulos):
 
-    novos_titulos = titulos_anbima[~titulos_anbima['isin'].isin(titulos_cadastrados)]
-    
-    # TRATAMENTO 
+    # Renomear e dropar colunas
     novos_titulos.drop(columns=[
                                 'expressao',
                                 'data_referencia',
@@ -60,10 +56,22 @@ def etl_novos_titulos(target_date):
     novos_titulos.rename(columns={
                                 'data_vencimento':'vencimento',
                                 'codigo_selic':'trading_code',
-                                'data_base':'data_emissao'
+                                'data_base':'data_emissao',
+                                'codigo_isin':'isin'
                                 }, inplace=True)
 
-    
+    # Eliminar as linhas com valores 'NTN-C' e 'NTN-F' na coluna 'tipo_titulo'
+    novos_titulos = novos_titulos[~novos_titulos['tipo_titulo'].isin(['NTN-C', 'NTN-F'])]
+
+    # Mapeamento de indexadores e taxas de emissão
+    map_indexador = {'LFT': 'CDI%', 'NTN-B': 'IPCA+', 'LTN':'PRE'}
+    map_taxa_emissao = {'LFT': 1, 'NTN-B': 0.06}
+
+    # Adicionar as colunas "indexador" e "taxa_emissao" ao DataFrame original
+    novos_titulos['indexador'] = novos_titulos['tipo_titulo'].map(map_indexador)
+    novos_titulos['taxa_emissao'] = novos_titulos['tipo_titulo'].map(map_taxa_emissao)
+
+    # Adicionar colunas para o cadastro
     novos_titulos['Risco'] = 'TBD'
     novos_titulos['Senioridade'] = 'TBD'
     novos_titulos['garantia'] = 'TBD'
@@ -72,8 +80,6 @@ def etl_novos_titulos(target_date):
     novos_titulos['Moeda'] = 'BRL'
     novos_titulos['data_inicio_rentabilidade'] = novos_titulos['data_emissao']
     novos_titulos['Book'] = 'Caixa'
-    novos_titulos['indexador'] = 'CDI%'   
-    novos_titulos['taxa_emissao'] = -1
     novos_titulos['artigo_emissao'] = 'TBD'
     novos_titulos['setor_industry_group'] = 'TBD'
     novos_titulos['emissor'] = 436
@@ -83,28 +89,48 @@ def etl_novos_titulos(target_date):
     novos_titulos['trade'] = 409
     novos_titulos['subclasse'] = 2
     novos_titulos['credit_score'] = 1
+
+    # Ajustando o nome dos ativos
     vencimento_string = novos_titulos['vencimento']
     vencimento = pd.to_datetime(vencimento_string)
     vencimento_formatado = vencimento.dt.strftime("%m/%Y")
     novos_titulos['nome_ativo'] = novos_titulos['tipo_titulo'].str.cat(vencimento_formatado, sep = ' ')
 
+    return novos_titulos
+
+#%%
+
+def etl_novos_titulos(target_date):
+    titulos_anbima = get_titulos_anbima(target_date)
+    titulos_cadastrados = get_titulos_cadastrados()
+
+    novos_titulos = titulos_anbima[~titulos_anbima['codigo_isin'].isin(titulos_cadastrados)]
+    
+
+    novos_titulos_tratados = tratamento_novos_titulos(novos_titulos)
+    
+
     # POST REQUESTS
     
-    if len(novos_titulos) > 0:
+    return novos_titulos_tratados
 
-        titulos_url = 'https://vanadio.azurewebsites.net/ativos/rest/titpublico/'
-        novos_titulos_dict = novos_titulos.to_dict(orient='records')
+    # if len(novos_titulos) > 0:
 
-        for titulo in novos_titulos_dict:
-            response = requests.post(url=titulos_url, json=titulo)
+    #     titulos_url = 'https://vanadio.azurewebsites.net/ativos/rest/titpublico/'
+    #     novos_titulos_dict = novos_titulos.to_dict(orient='records')
 
-            if response.status_code == 201:
-                print(f'Ativo {titulo["nome_ativo"]} cadastrado com sucesso.')
-            else:
-                print('Falha na requisição')
+    #     for titulo in novos_titulos_dict:
+    #         response = requests.post(url=titulos_url, json=titulo)
 
-    else:
-        print("Nao há nenhum novo titulo publico a ser cadastrado.")
+    #         if response.status_code == 201:
+    #             print(f'Ativo {titulo["nome_ativo"]} cadastrado com sucesso.')
+    #         else:
+    #             print('Falha na requisição')
+
+    # else:
+    #     print("Nao há nenhum novo titulo publico a ser cadastrado.")
 
     
 
+
+# %%
