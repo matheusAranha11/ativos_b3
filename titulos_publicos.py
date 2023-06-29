@@ -64,31 +64,33 @@ def tratamento_novos_titulos(novos_titulos):
     novos_titulos = novos_titulos[~novos_titulos['tipo_titulo'].isin(['NTN-C', 'NTN-F'])]
 
     # Mapeamento de indexadores e taxas de emissão
-    map_indexador = {'LFT': 'CDI%', 'NTN-B': 'IPCA+', 'LTN':'PRE'}
-    map_taxa_emissao = {'LFT': 1, 'NTN-B': -1, 'LTN':-1}
+    map_indexador = {"LFT": "CDI%", "NTN-B": "IPCA+", "LTN":"PRE"}
+    map_taxa_emissao = {"LFT": 1, "NTN-B": -1, "LTN":-1}
 
     # Adicionar as colunas "indexador" e "taxa_emissao" ao DataFrame original
     novos_titulos['indexador'] = novos_titulos['tipo_titulo'].map(map_indexador)
     novos_titulos['taxa_emissao'] = novos_titulos['tipo_titulo'].map(map_taxa_emissao)
 
     # Adicionar colunas para o cadastro
-    novos_titulos['Risco'] = 'TBD'
-    novos_titulos['Senioridade'] = 'TBD'
-    novos_titulos['garantia'] = 'TBD'
-    novos_titulos['liquidez_esperada'] = 'TBD'
-    novos_titulos['tipo_divida'] = 'TBD'
-    novos_titulos['Moeda'] = 'BRL'
+    novos_titulos['risco'] = "TBD"
+    novos_titulos['senioridade'] = "TBD"
+    novos_titulos['garantia'] = "TBD"
+    novos_titulos['liquidez_esperada'] = "TBD"
+    novos_titulos['tipo_divida'] = 6
+    novos_titulos['moeda'] = "BRL"
     novos_titulos['data_inicio_rentabilidade'] = novos_titulos['data_emissao']
-    novos_titulos['Book'] = 'Caixa'
-    novos_titulos['artigo_emissao'] = 'TBD'
-    novos_titulos['setor_industry_group'] = 'TBD'
+    novos_titulos['date_credit_score'] = novos_titulos['data_emissao']
+    novos_titulos['book'] = "Caixa"
+    novos_titulos['artigo_emissao'] = "TBD"
+    novos_titulos['setor_industry_group'] = 25
     novos_titulos['emissor'] = 436
-    novos_titulos['emissor_risco'] = 436
+    novos_titulos['emissor_risco'] = 118
     novos_titulos['grupo_economico'] = 245
     novos_titulos['analista_de_gestao'] = 1
     novos_titulos['trade'] = 409
     novos_titulos['subclasse'] = 2
     novos_titulos['credit_score'] = 1
+    
 
     # Ajustando o nome dos ativos
     vencimento_string = novos_titulos['vencimento']
@@ -111,9 +113,9 @@ def etl_novos_titulos(target_date):
     
     # POST REQUESTS
     
-    if len(novos_titulos) > 0:
+    if len(novos_titulos_tratados) > 0:
 
-        titulos_url = 'https://vanadio.azurewebsites.net/ativos/rest/titpublico/'
+        titulos_url = "https://vanadio.azurewebsites.net/ativos/rest/titpublico/"
         novos_titulos_dict = novos_titulos_tratados.to_dict(orient='records')
 
         for titulo in novos_titulos_dict:
@@ -123,10 +125,11 @@ def etl_novos_titulos(target_date):
                 print(f'Ativo {titulo["nome_ativo"]} cadastrado com sucesso.')
             else:
                 print('Falha na requisição')
-
+                
     else:
         print("Nao há nenhum novo titulo publico a ser cadastrado.")
 
 
     return    
 
+etl_novos_titulos('2023-06-28')
