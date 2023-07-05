@@ -106,7 +106,7 @@ def etl_novos_titulos(target_date):
     titulos_anbima = get_titulos_anbima(target_date)
     titulos_cadastrados = get_titulos_cadastrados()
 
-    novos_titulos = titulos_anbima[~titulos_anbima['codigo_isin'].isin(titulos_cadastrados)]
+    novos_titulos = titulos_anbima[~titulos_anbima['codigo_isin'].isin(titulos_cadastrados['isin'])]
     
 
     novos_titulos_tratados = tratamento_novos_titulos(novos_titulos)
@@ -115,7 +115,7 @@ def etl_novos_titulos(target_date):
     
     if len(novos_titulos_tratados) > 0:
 
-        titulos_url = "https://vanadio.azurewebsites.net/ativos/rest/titpublico/"
+        titulos_url = "http://127.0.0.1:8000/ativos/rest/titpublico/"
         novos_titulos_dict = novos_titulos_tratados.to_dict(orient='records')
 
         for titulo in novos_titulos_dict:
@@ -132,4 +132,4 @@ def etl_novos_titulos(target_date):
 
     return    
 
-etl_novos_titulos('2023-06-28')
+etl_novos_titulos('2023-07-03')
