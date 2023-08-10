@@ -1,9 +1,8 @@
-# from airflow import DAG
-# from airflow.operators.python import PythonOperator
-# from airflow.operators.bash import BashOperator
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
 from augme_utils.credentials.credentials import default_directory
-
-# import pendulum
+import pendulum
 
 download_dir = default_directory + 'isins_b3'
 
@@ -16,20 +15,19 @@ def download_atualizacoes_isins_b3():
     from selenium.webdriver.support.ui import Select
     from selenium.webdriver.common.action_chains import ActionChains
     from webdriver_manager.chrome import ChromeDriverManager
+    from selenium.webdriver.chrome.options import Options
     import time
-    
-    print(download_dir)
-    chrome_options = webdriver.ChromeOptions()
+
+    chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--headless")
-    #chrome_options.add_argument(f"download.default_directory={download_dir}")
     chrome_options.add_argument("--incognito")
     chrome_options.add_argument("--disable-popup-blocking")
     chrome_options.add_argument("--safebrowsing-disable-download-protection")
     prefs = {'download.default_directory': download_dir}
-    download_dir.add_experimental_option('prefs', prefs)
-    
+    chrome_options.add_experimental_option('prefs', prefs)
+
     driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
     actions = ActionChains(driver)
 
@@ -43,23 +41,22 @@ def download_atualizacoes_isins_b3():
     downloads.click()
     time.sleep(5)
 
-    
     atualizacoes_mensais = WebDriverWait(driver, 20).until(EC.element_to_be_clickable(
         (By.XPATH, "//*[@id='accordionBodyTwo']/div/div[1]/div[3]/div[2]/p[1]/a")))
     actions.move_to_element(atualizacoes_mensais).perform()
     atualizacoes_mensais.click()
     time.sleep(30)
 
-    driver.quit()
+    #driver.quit()
     driver.close()
 
     return None
-
+    
 def unzip_isins_b3():
 
     import zipfile
     # Get the directory path of the zip file
-    zip_path = download_dir + '/ISINS_M.zip'
+    zip_path = download_dir + '/ISINP_M.zip'
 
     # Open the zip file
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -73,7 +70,7 @@ def etl_b3_txt():
     from augme_utils.connections.connections import create_database_connection
     import pandas as pd
 
-    txt_filepath = download_dir + '/NUMERACAO.txt'
+    txt_filepath = download_dir + '/NUMERACA_M.txt'
 
     # LEITURA DO ARQUIVO
     b3_df = pd.read_csv(txt_filepath)
@@ -132,6 +129,7 @@ def clear_dir():
             os.remove(file_path)
             print(f"Deleted file: {file_path}")
 
+
 def cadastrar_futuros():
     from augme_utils.connections.connections import create_database_connection
     import pandas as pd
@@ -139,19 +137,19 @@ def cadastrar_futuros():
 
     query_futuros = """
     WITH codigos_futuros AS (
-	SELECT *
-	FROM VANADIO.bronze.FUTUROS_BUSCADOS
-
-    ),
-
-    futuros_cadastrados AS (
-
-        SELECT isin,
-            trading_code
-        FROM PREGO.prego.ativos_futuros f
-        JOIN PREGO.prego.ativos_derivativo d ON f.derivativo_ptr_id = d.ativo_ptr_id
-        JOIN PREGO.prego.ativos_ativo a ON d.ativo_ptr_id = a.id
-    ),
+  	SELECT *
+  	FROM VANADIO.bronze.FUTUROS_BUSCADOS
+  
+      ),
+  
+      futuros_cadastrados AS (
+  
+          SELECT isin,
+              trading_code
+          FROM PREGO.prego.ativos_futuros f
+          JOIN PREGO.prego.ativos_derivativo d ON f.derivativo_ptr_id = d.ativo_ptr_id
+          JOIN PREGO.prego.ativos_ativo a ON d.ativo_ptr_id = a.id
+      ),
 
     futuros_no_arquivo AS (
 
@@ -226,4 +224,29 @@ def cadastrar_futuros():
 
     return None
 
-cadastrar_futuros()
+
+
+br_timezone = pendulum.timezone("Brazil/East")
+
+with DAG(
+
+    'cadastro_futuros',
+
+    start_date = pendulum.datetime(2023, 4, 11, tz=br_timezone),
+
+    schedule_interval = '0 7 2 * *',
+
+    tags = ["Cadastro"],
+
+    catchup = False
+
+) as dag:
+
+    update_utils = BashOperator(task_id='update_utils', bash_command='pip install git+https://github.com/vanadio-augme/augme_utils.git --force-reinstall')
+    download_isins = PythonOperator(task_id='download_atualizacoes', python_callable = download_atualizacoes_isins_b3)
+    unzip_arq = PythonOperator(task_id='unzip_arq', python_callable = unzip_isins_b3)
+    etl_isins = PythonOperator(task_id='elt_isins', python_callable = etl_b3_txt)
+    cadastro_futuros = PythonOperator(task_id='cadastrar_futuros', python_callable = cadastrar_futuros)
+    clear_directory = PythonOperator(task_id='clear_isins_directory', python_callable = clear_dir)
+    
+    update_utils >> download_isins >> unzip_arq >> etl_isins >> [cadastro_futuros, clear_directory]
