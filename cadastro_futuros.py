@@ -232,7 +232,7 @@ with DAG(
 
     'cadastro_futuros',
 
-    start_date = pendulum.datetime(2023, 4, 11, tz=br_timezone),
+    start_date = pendulum.datetime(2023, 8, 10, tz=br_timezone),
 
     schedule_interval = '0 7 2 * *',
 

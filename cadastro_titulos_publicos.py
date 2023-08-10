@@ -25,7 +25,7 @@ with DAG(
     
 ) as dag:
 
-    date = {{ "next_ds" }}
+    date = "{{ next_ds }}"
 
     def get_titulos_anbima(target_date):
 
